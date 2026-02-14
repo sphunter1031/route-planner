@@ -1,0 +1,16 @@
+﻿.vscode
+route_planner
+route_planner\app
+route_planner\app\daily
+route_planner\app\weekly
+route_planner\public
+route_planner\solver_api
+route_planner\solver_api\__pycache__
+route_planner\src
+route_planner\src\lib
+route_planner\supabase
+route_planner\supabase\.temp
+route_planner\supabase\functions
+route_planner\supabase\functions\kakao-matrix
+supabase
+supabase\.temp

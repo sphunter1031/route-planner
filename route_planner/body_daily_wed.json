@@ -1,0 +1,17 @@
+﻿{
+  "stops": [
+    { "id": "ORI1",   "lat": 37.5665, "lng": 126.9780, "service_minutes": 0,  "priority": false, "locked": true,  "seq": 0 },
+
+    { "id": "GNB",    "lat": 37.5665, "lng": 126.9780, "service_minutes": 10, "priority": false, "locked": false, "seq": null },
+    { "id": "MISS",   "lat": 37.5665, "lng": 126.9780, "service_minutes": 10, "priority": false, "locked": false, "seq": null },
+    { "id": "GNBBD",  "lat": 37.5665, "lng": 126.9780, "service_minutes": 10, "priority": false, "locked": false, "seq": null },
+    { "id": "JN",     "lat": 37.5665, "lng": 126.9780, "service_minutes": 10, "priority": false, "locked": false, "seq": null },
+    { "id": "SSGSBD", "lat": 37.5665, "lng": 126.9780, "service_minutes": 10, "priority": false, "locked": false, "seq": null },
+    { "id": "BJ2",    "lat": 37.5665, "lng": 126.9780, "service_minutes": 10, "priority": false, "locked": false, "seq": null },
+    { "id": "DYL2",   "lat": 37.5665, "lng": 126.9780, "service_minutes": 10, "priority": false, "locked": false, "seq": null },
+    { "id": "IMHN",   "lat": 37.5665, "lng": 126.9780, "service_minutes": 10, "priority": false, "locked": false, "seq": null },
+    { "id": "SJ",     "lat": 37.5665, "lng": 126.9780, "service_minutes": 10, "priority": false, "locked": false, "seq": null },
+    { "id": "WG",     "lat": 37.5665, "lng": 126.9780, "service_minutes": 10, "priority": false, "locked": false, "seq": null }
+  ],
+  "time_limit_seconds": 3
+}

@@ -1,0 +1,9 @@
+{
+  "deno.enable": true,
+  "deno.path": "C:/Users/김은주/.deno/bin/deno.exe",
+  "deno.unstable": true,
+
+  "deno.enablePaths": [
+    "./route_planner/supabase/functions"
+  ]
+}

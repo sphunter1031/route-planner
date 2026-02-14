@@ -1,0 +1,18 @@
+﻿{
+  "plan_date":"2026-01-28",
+  "departAt":"09:00",
+  "time_limit_seconds":3,
+  "stops":[
+    {"id":"ORI1","lat":37.599525,"lng":127.005403,"seq":0,"locked":true,"priority":false,"service_minutes":0},
+    {"id":"GNB","lat":37.605949,"lng":127.020293,"seq":1,"locked":false,"priority":true,"service_minutes":10},
+    {"id":"MISS","lat":37.590664,"lng":127.011345,"seq":2,"locked":false,"priority":true,"service_minutes":10},
+    {"id":"GNBBD","lat":37.605949,"lng":127.020293,"seq":3,"locked":false,"priority":false,"service_minutes":10},
+    {"id":"JN","lat":37.571687,"lng":126.993564,"seq":4,"locked":false,"priority":true,"service_minutes":10},
+    {"id":"SSGSBD","lat":37.605802,"lng":127.024399,"seq":5,"locked":false,"priority":false,"service_minutes":10},
+    {"id":"BJ2","lat":37.614085,"lng":127.052158,"seq":6,"locked":false,"priority":false,"service_minutes":10},
+    {"id":"DYL2","lat":37.609705,"lng":127.046742,"seq":7,"locked":false,"priority":false,"service_minutes":10},
+    {"id":"IMHN","lat":37.606479,"lng":127.043085,"seq":8,"locked":false,"priority":false,"service_minutes":10},
+    {"id":"SJ","lat":37.631384,"lng":127.018878,"seq":9,"locked":false,"priority":false,"service_minutes":10},
+    {"id":"WG","lat":37.60489,"lng":127.037633,"seq":10,"locked":false,"priority":false,"service_minutes":10}
+  ]
+}
