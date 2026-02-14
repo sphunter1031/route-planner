@@ -127,14 +127,22 @@ function normalizeDailyRows(data: unknown): DailyRow[] {
 
 // ----- Edge Function direct fetch helpers -----
 function getSupabaseEnv() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || (process.env as any).VITE_SUPABASE_URL || "";
+  const url =
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    (process.env as any).VITE_SUPABASE_URL ||
+    "";
 
   // ✅ supabase-js / apikey 헤더에 들어갈 키 (sb_publishable_... 가능)
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || (process.env as any).VITE_SUPABASE_ANON_KEY || "";
+  const anonKey =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    (process.env as any).VITE_SUPABASE_ANON_KEY ||
+    "";
 
   // ✅ Functions Gateway 통과용 JWT (eyJ...)
   const anonJwt =
-    (process.env as any).NEXT_PUBLIC_SUPABASE_ANON_JWT || (process.env as any).VITE_SUPABASE_ANON_JWT || "";
+    (process.env as any).NEXT_PUBLIC_SUPABASE_ANON_JWT ||
+    (process.env as any).VITE_SUPABASE_ANON_JWT ||
+    "";
 
   return { url, anonKey, anonJwt };
 }
@@ -157,7 +165,12 @@ async function callEdgeFunction<T = any>(fnName: string, body: any): Promise<T> 
   };
 
   // ✅ “게이트웨이 통과용 Authorization이 필요한” 함수만 allowlist
-  const allowAnonBearer = new Set(["kakao-matrix", "apply-result", "optimize-route", "save-optimize-result"]);
+  const allowAnonBearer = new Set([
+    "kakao-matrix",
+    "apply-result",
+    "optimize-route",
+    "save-optimize-result",
+  ]);
 
   if (session?.access_token) {
     headers.Authorization = `Bearer ${session.access_token}`;
@@ -401,7 +414,9 @@ function MobileCards({
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  <span style={{ fontWeight: 900, fontSize: 16 }}>{i + 1}. {name}</span>
+                  <span style={{ fontWeight: 900, fontSize: 16 }}>
+                    {i + 1}. {name}
+                  </span>
                   {locked ? <span style={pillStyle("#f2f2f2", "#ddd")}>고정</span> : null}
                   {optMode === "PREVIEW" ? <span style={pillStyle("#fff3cd", "#f0c36d")}>PREVIEW</span> : null}
                 </div>
@@ -522,7 +537,7 @@ export default function DailyPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
-  // ✅ 모바일/PC 분기
+  // ✅ 모바일/PC 분기 (추가된 부분)
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
     const update = () => setIsMobile(window.innerWidth <= 768);
@@ -558,7 +573,9 @@ export default function DailyPage() {
   const [previewAllClientIds, setPreviewAllClientIds] = useState<string[] | null>(null);
 
   const effectiveServiceMinutes = (r: DailyRow) =>
-    Number.isFinite(r.service_minutes_override as number) ? Number(r.service_minutes_override) : Number(r.service_minutes ?? 0);
+    Number.isFinite(r.service_minutes_override as number)
+      ? Number(r.service_minutes_override)
+      : Number(r.service_minutes ?? 0);
 
   const fetchDaily = async () => {
     setLoading(true);
@@ -645,7 +662,11 @@ export default function DailyPage() {
       const iPrev = idxById.get(prev);
       const iCur = idxById.get(cur);
 
-      const t = iPrev != null && iCur != null && previewMatrix?.[iPrev]?.[iCur] != null ? Number(previewMatrix[iPrev][iCur]) : 0;
+      const t =
+        iPrev != null && iCur != null && previewMatrix?.[iPrev]?.[iCur] != null
+          ? Number(previewMatrix[iPrev][iCur])
+          : 0;
+
       m.set(cur, Number.isFinite(t) ? t : 0);
     }
     return m;
@@ -658,7 +679,10 @@ export default function DailyPage() {
     return listForDisplay.map((r, idx) => {
       // ✅ LIVE: DB travel_minutes 사용
       // ✅ PREVIEW: matrix 기반 travel 사용
-      const travel = optMode === "PREVIEW" ? Number(previewTravelByClient.get(r.client_id) ?? 0) : Number(r.travel_minutes ?? 0);
+      const travel =
+        optMode === "PREVIEW"
+          ? Number(previewTravelByClient.get(r.client_id) ?? 0)
+          : Number(r.travel_minutes ?? 0);
 
       const arrive = cur + (idx === 0 ? 0 : travel);
       const depart = arrive + effectiveServiceMinutes(r);
@@ -737,7 +761,9 @@ export default function DailyPage() {
     setLoading(true);
 
     try {
-      const safe = Number.isFinite(next) ? Math.max(0, Math.min(999, Math.floor(next))) : effectiveServiceMinutes(r);
+      const safe = Number.isFinite(next)
+        ? Math.max(0, Math.min(999, Math.floor(next)))
+        : effectiveServiceMinutes(r);
 
       const { error } = await supabase
         .from("daily_plan_items")
@@ -840,9 +866,10 @@ export default function DailyPage() {
           throw new Error(`Missing clients.lon for client_id=${r.client_id} (clients 테이블에 lon 필요)`);
         }
 
-        const effService = Number.isFinite(r.service_minutes_override as number)
-          ? Number(r.service_minutes_override)
-          : Number(r.service_minutes ?? 0);
+        const effService =
+          Number.isFinite(r.service_minutes_override as number)
+            ? Number(r.service_minutes_override)
+            : Number(r.service_minutes ?? 0);
 
         stops.push({
           id: r.client_id,
@@ -864,6 +891,7 @@ export default function DailyPage() {
         time_limit_seconds: 3,
       });
 
+      // ✅ 너가 원한 디버그 로그 “여기”가 정답 위치
       console.log("opt.ok", opt?.ok);
       console.log("client_ids", opt?.client_ids);
       console.log("matrix row0", opt?.matrix_minutes?.[0]);
