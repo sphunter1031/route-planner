@@ -127,22 +127,14 @@ function normalizeDailyRows(data: unknown): DailyRow[] {
 
 // ----- Edge Function direct fetch helpers -----
 function getSupabaseEnv() {
-  const url =
-    process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    (process.env as any).VITE_SUPABASE_URL ||
-    "";
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || (process.env as any).VITE_SUPABASE_URL || "";
 
   // ✅ supabase-js / apikey 헤더에 들어갈 키 (sb_publishable_... 가능)
-  const anonKey =
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-    (process.env as any).VITE_SUPABASE_ANON_KEY ||
-    "";
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || (process.env as any).VITE_SUPABASE_ANON_KEY || "";
 
   // ✅ Functions Gateway 통과용 JWT (eyJ...)
   const anonJwt =
-    (process.env as any).NEXT_PUBLIC_SUPABASE_ANON_JWT ||
-    (process.env as any).VITE_SUPABASE_ANON_JWT ||
-    "";
+    (process.env as any).NEXT_PUBLIC_SUPABASE_ANON_JWT || (process.env as any).VITE_SUPABASE_ANON_JWT || "";
 
   return { url, anonKey, anonJwt };
 }
@@ -165,12 +157,7 @@ async function callEdgeFunction<T = any>(fnName: string, body: any): Promise<T> 
   };
 
   // ✅ “게이트웨이 통과용 Authorization이 필요한” 함수만 allowlist
-  const allowAnonBearer = new Set([
-    "kakao-matrix",
-    "apply-result",
-    "optimize-route",
-    "save-optimize-result",
-  ]);
+  const allowAnonBearer = new Set(["kakao-matrix", "apply-result", "optimize-route", "save-optimize-result"]);
 
   if (session?.access_token) {
     headers.Authorization = `Bearer ${session.access_token}`;
@@ -229,6 +216,302 @@ function extractClientOrder(solved: any, client_ids: string[]) {
   return client_ids;
 }
 
+// ---------- UI helpers ----------
+function isFiniteNumber(v: unknown): v is number {
+  return typeof v === "number" && Number.isFinite(v);
+}
+
+function pillStyle(bg: string, border: string) {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    padding: "4px 10px",
+    borderRadius: 999,
+    fontSize: 12,
+    border: `1px solid ${border}`,
+    background: bg,
+    lineHeight: "18px",
+    whiteSpace: "nowrap" as const,
+  };
+}
+
+type ComputedRow = DailyRow & {
+  _travel: number;
+  _arriveHHMM: string;
+  _departHHMM: string;
+  _effective_service_minutes: number;
+};
+
+type SharedHandlers = {
+  optMode: "LIVE" | "PREVIEW";
+  moveRow: (r: DailyRow, dir: "up" | "down") => Promise<void>;
+  toggleLocked: (r: DailyRow, next: boolean) => Promise<void>;
+  updateServiceMinutes: (r: DailyRow, next: number) => Promise<void>;
+  openKakaoMap: (name: string, lat?: number | null, lon?: number | null) => void;
+  setRows: React.Dispatch<React.SetStateAction<DailyRow[]>>;
+};
+
+function PcTable({
+  rows,
+  optMode,
+  moveRow,
+  toggleLocked,
+  updateServiceMinutes,
+  openKakaoMap,
+  setRows,
+}: { rows: ComputedRow[] } & SharedHandlers) {
+  return (
+    <table style={{ width: "100%", marginTop: 10, borderCollapse: "collapse" }}>
+      <thead>
+        <tr style={{ textAlign: "left", borderBottom: "1px solid #eee" }}>
+          <th style={{ padding: "8px 0", width: 90 }}>이동</th>
+          <th style={{ padding: "8px 0", width: 60 }}>순서</th>
+          <th style={{ padding: "8px 0" }}>고객</th>
+          <th style={{ padding: "8px 0", width: 90 }}>고정</th>
+          <th style={{ padding: "8px 0", width: 140 }}>청소시간(분)</th>
+          <th style={{ padding: "8px 0", width: 120 }}>이동시간(분)</th>
+          <th style={{ padding: "8px 0", width: 90 }}>도착시간</th>
+          <th style={{ padding: "8px 0", width: 90 }}>출발시간</th>
+          <th style={{ padding: "8px 0", width: 130 }}>네비 연결</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        {rows.map((r, i) => (
+          <tr key={r.id} style={{ borderBottom: "1px solid #f3f3f3" }}>
+            <td style={{ padding: "10px 0" }}>
+              <button
+                onClick={() => moveRow(r, "up")}
+                disabled={optMode === "PREVIEW" || i === 0 || r.locked}
+                style={{
+                  marginRight: 6,
+                  padding: "6px 10px",
+                  borderRadius: 8,
+                  border: "1px solid #ddd",
+                  cursor: optMode === "PREVIEW" || i === 0 || r.locked ? "not-allowed" : "pointer",
+                  opacity: optMode === "PREVIEW" || i === 0 || r.locked ? 0.4 : 1,
+                }}
+              >
+                ↑
+              </button>
+              <button
+                onClick={() => moveRow(r, "down")}
+                disabled={optMode === "PREVIEW" || i === rows.length - 1 || r.locked}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 8,
+                  border: "1px solid #ddd",
+                  cursor: optMode === "PREVIEW" || i === rows.length - 1 || r.locked ? "not-allowed" : "pointer",
+                  opacity: optMode === "PREVIEW" || i === rows.length - 1 || r.locked ? 0.4 : 1,
+                }}
+              >
+                ↓
+              </button>
+            </td>
+
+            <td style={{ padding: "10px 0" }}>{r.seq}</td>
+
+            <td style={{ padding: "10px 0", fontWeight: 700 }}>{r.clients?.name ?? ""}</td>
+
+            <td style={{ padding: "10px 0" }}>
+              <input
+                type="checkbox"
+                checked={r.locked}
+                disabled={optMode === "PREVIEW"}
+                onChange={(e) => toggleLocked(r, e.target.checked)}
+              />
+            </td>
+
+            <td style={{ padding: "10px 0" }}>
+              <input
+                type="number"
+                min={0}
+                max={999}
+                step={1}
+                value={r._effective_service_minutes}
+                disabled={optMode === "PREVIEW"}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  setRows((prev) =>
+                    prev.map((x) =>
+                      x.id === r.id
+                        ? { ...x, service_minutes_override: Number.isFinite(v) ? v : x.service_minutes_override }
+                        : x
+                    )
+                  );
+                }}
+                onBlur={(e) => updateServiceMinutes(r, Number(e.target.value))}
+                style={{ width: 110, padding: "6px 8px", border: "1px solid #ddd", borderRadius: 8 }}
+              />
+              {r.service_minutes_override !== null && r.service_minutes_override !== undefined && (
+                <span style={{ marginLeft: 8, fontSize: 12, opacity: 0.7 }} title="override 적용 중">
+                  (ovr)
+                </span>
+              )}
+            </td>
+
+            <td style={{ padding: "10px 0" }}>{r._travel ?? 0}m</td>
+            <td style={{ padding: "10px 0" }}>{r._arriveHHMM}</td>
+            <td style={{ padding: "10px 0" }}>{r._departHHMM}</td>
+
+            <td style={{ padding: "10px 0" }}>
+              <button
+                onClick={() => openKakaoMap(r.clients?.name ?? r.client_id, r.clients?.lat, r.clients?.lon)}
+                style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd", cursor: "pointer" }}
+              >
+                Kakao Map
+              </button>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function MobileCards({
+  rows,
+  optMode,
+  moveRow,
+  toggleLocked,
+  updateServiceMinutes,
+  openKakaoMap,
+  setRows,
+}: { rows: ComputedRow[] } & SharedHandlers) {
+  return (
+    <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 12 }}>
+      {rows.map((r, i) => {
+        const name = r.clients?.name ?? r.client_id;
+        const locked = r.locked;
+
+        return (
+          <div
+            key={r.id}
+            style={{
+              border: "1px solid #eee",
+              borderRadius: 14,
+              padding: 12,
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
+            }}
+          >
+            {/* header */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span style={{ fontWeight: 900, fontSize: 16 }}>{i + 1}. {name}</span>
+                  {locked ? <span style={pillStyle("#f2f2f2", "#ddd")}>고정</span> : null}
+                  {optMode === "PREVIEW" ? <span style={pillStyle("#fff3cd", "#f0c36d")}>PREVIEW</span> : null}
+                </div>
+
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", fontSize: 13, opacity: 0.9 }}>
+                  <span style={pillStyle("#f7f7ff", "#dfe3ff")}>도착 {r._arriveHHMM}</span>
+                  <span style={pillStyle("#f7fff7", "#d9f2d9")}>출발 {r._departHHMM}</span>
+                  <span style={pillStyle("#f7f7f7", "#e6e6e6")}>이동 {r._travel ?? 0}m</span>
+                </div>
+              </div>
+
+              {/* nav */}
+              <button
+                onClick={() => openKakaoMap(name, r.clients?.lat, r.clients?.lon)}
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: 12,
+                  border: "1px solid #ddd",
+                  cursor: "pointer",
+                  fontWeight: 800,
+                }}
+              >
+                카카오
+              </button>
+            </div>
+
+            {/* controls */}
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+              <button
+                onClick={() => moveRow(r, "up")}
+                disabled={optMode === "PREVIEW" || i === 0 || locked}
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: 12,
+                  border: "1px solid #ddd",
+                  cursor: optMode === "PREVIEW" || i === 0 || locked ? "not-allowed" : "pointer",
+                  opacity: optMode === "PREVIEW" || i === 0 || locked ? 0.4 : 1,
+                  fontWeight: 800,
+                }}
+              >
+                ↑ 위
+              </button>
+
+              <button
+                onClick={() => moveRow(r, "down")}
+                disabled={optMode === "PREVIEW" || i === rows.length - 1 || locked}
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: 12,
+                  border: "1px solid #ddd",
+                  cursor: optMode === "PREVIEW" || i === rows.length - 1 || locked ? "not-allowed" : "pointer",
+                  opacity: optMode === "PREVIEW" || i === rows.length - 1 || locked ? 0.4 : 1,
+                  fontWeight: 800,
+                }}
+              >
+                ↓ 아래
+              </button>
+
+              <label style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
+                <span style={{ fontWeight: 800 }}>고정</span>
+                <input
+                  type="checkbox"
+                  checked={locked}
+                  disabled={optMode === "PREVIEW"}
+                  onChange={(e) => toggleLocked(r, e.target.checked)}
+                  style={{ width: 18, height: 18 }}
+                />
+              </label>
+            </div>
+
+            {/* service minutes */}
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <span style={{ fontWeight: 800 }}>청소시간(분)</span>
+              <input
+                type="number"
+                min={0}
+                max={999}
+                step={1}
+                value={r._effective_service_minutes}
+                disabled={optMode === "PREVIEW"}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  setRows((prev) =>
+                    prev.map((x) =>
+                      x.id === r.id
+                        ? { ...x, service_minutes_override: Number.isFinite(v) ? v : x.service_minutes_override }
+                        : x
+                    )
+                  );
+                }}
+                onBlur={(e) => updateServiceMinutes(r, Number(e.target.value))}
+                style={{
+                  width: 120,
+                  padding: "10px 10px",
+                  border: "1px solid #ddd",
+                  borderRadius: 12,
+                  fontSize: 16,
+                }}
+              />
+              {r.service_minutes_override !== null && r.service_minutes_override !== undefined ? (
+                <span style={{ fontSize: 12, opacity: 0.7 }}>(ovr)</span>
+              ) : null}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function DailyPage() {
   const today = useMemo(() => new Date(), []);
   const [weekStart, setWeekStart] = useState<string>(() => getWeekStartMonday(today));
@@ -238,6 +521,15 @@ export default function DailyPage() {
   const [rows, setRows] = useState<DailyRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+
+  // ✅ 모바일/PC 분기
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const update = () => setIsMobile(window.innerWidth <= 768);
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
 
   // ORI1 좌표 (로컬 저장)
   const [homeLat, setHomeLat] = useState<number>(() => {
@@ -266,9 +558,7 @@ export default function DailyPage() {
   const [previewAllClientIds, setPreviewAllClientIds] = useState<string[] | null>(null);
 
   const effectiveServiceMinutes = (r: DailyRow) =>
-    Number.isFinite(r.service_minutes_override as number)
-      ? Number(r.service_minutes_override)
-      : Number(r.service_minutes ?? 0);
+    Number.isFinite(r.service_minutes_override as number) ? Number(r.service_minutes_override) : Number(r.service_minutes ?? 0);
 
   const fetchDaily = async () => {
     setLoading(true);
@@ -355,11 +645,7 @@ export default function DailyPage() {
       const iPrev = idxById.get(prev);
       const iCur = idxById.get(cur);
 
-      const t =
-        iPrev != null && iCur != null && previewMatrix?.[iPrev]?.[iCur] != null
-          ? Number(previewMatrix[iPrev][iCur])
-          : 0;
-
+      const t = iPrev != null && iCur != null && previewMatrix?.[iPrev]?.[iCur] != null ? Number(previewMatrix[iPrev][iCur]) : 0;
       m.set(cur, Number.isFinite(t) ? t : 0);
     }
     return m;
@@ -372,10 +658,7 @@ export default function DailyPage() {
     return listForDisplay.map((r, idx) => {
       // ✅ LIVE: DB travel_minutes 사용
       // ✅ PREVIEW: matrix 기반 travel 사용
-      const travel =
-        optMode === "PREVIEW"
-          ? Number(previewTravelByClient.get(r.client_id) ?? 0)
-          : Number(r.travel_minutes ?? 0);
+      const travel = optMode === "PREVIEW" ? Number(previewTravelByClient.get(r.client_id) ?? 0) : Number(r.travel_minutes ?? 0);
 
       const arrive = cur + (idx === 0 ? 0 : travel);
       const depart = arrive + effectiveServiceMinutes(r);
@@ -387,7 +670,7 @@ export default function DailyPage() {
         _arriveHHMM: minutesToHHMM(arrive),
         _departHHMM: minutesToHHMM(depart),
         _effective_service_minutes: effectiveServiceMinutes(r),
-      };
+      } as ComputedRow;
     });
   }, [listForDisplay, dayStartTime, optMode, previewTravelByClient]);
 
@@ -454,9 +737,7 @@ export default function DailyPage() {
     setLoading(true);
 
     try {
-      const safe = Number.isFinite(next)
-        ? Math.max(0, Math.min(999, Math.floor(next)))
-        : effectiveServiceMinutes(r);
+      const safe = Number.isFinite(next) ? Math.max(0, Math.min(999, Math.floor(next))) : effectiveServiceMinutes(r);
 
       const { error } = await supabase
         .from("daily_plan_items")
@@ -518,7 +799,7 @@ export default function DailyPage() {
 
   // ✅ Kakao Map: 좌표 우선(정확), 없으면 q 검색으로 fallback
   const openKakaoMap = (name: string, lat?: number | null, lon?: number | null) => {
-    if (typeof lat === "number" && Number.isFinite(lat) && typeof lon === "number" && Number.isFinite(lon)) {
+    if (isFiniteNumber(lat) && isFiniteNumber(lon)) {
       const url = `https://map.kakao.com/link/map/${encodeURIComponent(name)},${lat},${lon}`;
       window.open(url, "_blank", "noopener,noreferrer");
       return;
@@ -552,17 +833,16 @@ export default function DailyPage() {
         const lat = r.clients?.lat;
         const lon = r.clients?.lon;
 
-        if (typeof lat !== "number" || !Number.isFinite(lat)) {
+        if (!isFiniteNumber(lat)) {
           throw new Error(`Missing clients.lat for client_id=${r.client_id} (clients 테이블에 lat 필요)`);
         }
-        if (typeof lon !== "number" || !Number.isFinite(lon)) {
+        if (!isFiniteNumber(lon)) {
           throw new Error(`Missing clients.lon for client_id=${r.client_id} (clients 테이블에 lon 필요)`);
         }
 
-        const effService =
-          Number.isFinite(r.service_minutes_override as number)
-            ? Number(r.service_minutes_override)
-            : Number(r.service_minutes ?? 0);
+        const effService = Number.isFinite(r.service_minutes_override as number)
+          ? Number(r.service_minutes_override)
+          : Number(r.service_minutes ?? 0);
 
         stops.push({
           id: r.client_id,
@@ -584,7 +864,6 @@ export default function DailyPage() {
         time_limit_seconds: 3,
       });
 
-      // ✅ 너가 원한 디버그 로그 “여기”가 정답 위치
       console.log("opt.ok", opt?.ok);
       console.log("client_ids", opt?.client_ids);
       console.log("matrix row0", opt?.matrix_minutes?.[0]);
@@ -684,8 +963,8 @@ export default function DailyPage() {
   };
 
   return (
-    <main style={{ padding: 24, maxWidth: 1200, margin: "0 auto" }}>
-      <h1 style={{ fontSize: 32, fontWeight: 800 }}>데일리 플랜</h1>
+    <main style={{ padding: 16, maxWidth: 1200, margin: "0 auto" }}>
+      <h1 style={{ fontSize: isMobile ? 26 : 32, fontWeight: 800 }}>데일리 플랜</h1>
 
       <div style={{ marginTop: 16, display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
         <label style={{ fontWeight: 700 }}>주 시작일</label>
@@ -754,16 +1033,7 @@ export default function DailyPage() {
               Back to LIVE
             </button>
 
-            <span
-              style={{
-                padding: "4px 10px",
-                border: "1px solid #f0c36d",
-                borderRadius: 999,
-                fontSize: 12,
-                background: "#fff3cd",
-              }}
-              title="Optimize는 생성만 했고 아직 DB에 반영 안 됨"
-            >
+            <span style={pillStyle("#fff3cd", "#f0c36d")} title="Optimize는 생성만 했고 아직 DB에 반영 안 됨">
               PREVIEW (not applied)
             </span>
 
@@ -787,115 +1057,26 @@ export default function DailyPage() {
 
           {computed.length === 0 ? (
             <p style={{ marginTop: 8, opacity: 0.6 }}>비어있음 (Copy from Weekly 눌러봐)</p>
+          ) : isMobile ? (
+            <MobileCards
+              rows={computed}
+              optMode={optMode}
+              moveRow={moveRow}
+              toggleLocked={toggleLocked}
+              updateServiceMinutes={updateServiceMinutes}
+              openKakaoMap={openKakaoMap}
+              setRows={setRows}
+            />
           ) : (
-            <table style={{ width: "100%", marginTop: 10, borderCollapse: "collapse" }}>
-              <thead>
-                <tr style={{ textAlign: "left", borderBottom: "1px solid #eee" }}>
-                  <th style={{ padding: "8px 0", width: 90 }}>이동</th>
-                  <th style={{ padding: "8px 0", width: 60 }}>순서</th>
-                  <th style={{ padding: "8px 0" }}>고객</th>
-                  <th style={{ padding: "8px 0", width: 90 }}>고정</th>
-                  <th style={{ padding: "8px 0", width: 140 }}>청소시간(분)</th>
-                  <th style={{ padding: "8px 0", width: 120 }}>이동시간(분)</th>
-                  <th style={{ padding: "8px 0", width: 90 }}>도착시간</th>
-                  <th style={{ padding: "8px 0", width: 90 }}>출발시간</th>
-                  <th style={{ padding: "8px 0", width: 130 }}>네비 연결</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {computed.map((r: any, i) => (
-                  <tr key={r.id} style={{ borderBottom: "1px solid #f3f3f3" }}>
-                    <td style={{ padding: "10px 0" }}>
-                      <button
-                        onClick={() => moveRow(r, "up")}
-                        disabled={optMode === "PREVIEW" || i === 0 || r.locked}
-                        style={{
-                          marginRight: 6,
-                          padding: "6px 10px",
-                          borderRadius: 8,
-                          border: "1px solid #ddd",
-                          cursor: optMode === "PREVIEW" || i === 0 || r.locked ? "not-allowed" : "pointer",
-                          opacity: optMode === "PREVIEW" || i === 0 || r.locked ? 0.4 : 1,
-                        }}
-                      >
-                        ↑
-                      </button>
-                      <button
-                        onClick={() => moveRow(r, "down")}
-                        disabled={optMode === "PREVIEW" || i === computed.length - 1 || r.locked}
-                        style={{
-                          padding: "6px 10px",
-                          borderRadius: 8,
-                          border: "1px solid #ddd",
-                          cursor:
-                            optMode === "PREVIEW" || i === computed.length - 1 || r.locked
-                              ? "not-allowed"
-                              : "pointer",
-                          opacity: optMode === "PREVIEW" || i === computed.length - 1 || r.locked ? 0.4 : 1,
-                        }}
-                      >
-                        ↓
-                      </button>
-                    </td>
-
-                    <td style={{ padding: "10px 0" }}>{r.seq}</td>
-
-                    <td style={{ padding: "10px 0", fontWeight: 700 }}>{r.clients?.name ?? ""}</td>
-
-                    <td style={{ padding: "10px 0" }}>
-                      <input
-                        type="checkbox"
-                        checked={r.locked}
-                        disabled={optMode === "PREVIEW"}
-                        onChange={(e) => toggleLocked(r, e.target.checked)}
-                      />
-                    </td>
-
-                    <td style={{ padding: "10px 0" }}>
-                      <input
-                        type="number"
-                        min={0}
-                        max={999}
-                        step={1}
-                        value={r._effective_service_minutes}
-                        disabled={optMode === "PREVIEW"}
-                        onChange={(e) => {
-                          const v = Number(e.target.value);
-                          setRows((prev) =>
-                            prev.map((x) =>
-                              x.id === r.id
-                                ? { ...x, service_minutes_override: Number.isFinite(v) ? v : x.service_minutes_override }
-                                : x
-                            )
-                          );
-                        }}
-                        onBlur={(e) => updateServiceMinutes(r, Number(e.target.value))}
-                        style={{ width: 110, padding: "6px 8px", border: "1px solid #ddd", borderRadius: 8 }}
-                      />
-                      {r.service_minutes_override !== null && r.service_minutes_override !== undefined && (
-                        <span style={{ marginLeft: 8, fontSize: 12, opacity: 0.7 }} title="override 적용 중">
-                          (ovr)
-                        </span>
-                      )}
-                    </td>
-
-                    <td style={{ padding: "10px 0" }}>{r._travel ?? 0}m</td>
-                    <td style={{ padding: "10px 0" }}>{r._arriveHHMM}</td>
-                    <td style={{ padding: "10px 0" }}>{r._departHHMM}</td>
-
-                    <td style={{ padding: "10px 0" }}>
-                      <button
-                        onClick={() => openKakaoMap(r.clients?.name ?? r.client_id, r.clients?.lat, r.clients?.lon)}
-                        style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd", cursor: "pointer" }}
-                      >
-                        Kakao Map
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <PcTable
+              rows={computed}
+              optMode={optMode}
+              moveRow={moveRow}
+              toggleLocked={toggleLocked}
+              updateServiceMinutes={updateServiceMinutes}
+              openKakaoMap={openKakaoMap}
+              setRows={setRows}
+            />
           )}
 
           <div style={{ marginTop: 12, opacity: 0.75, fontSize: 13 }}>
