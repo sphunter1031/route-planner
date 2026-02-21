@@ -264,7 +264,7 @@ type SharedHandlers = {
   moveRow: (r: DailyRow, dir: "up" | "down") => Promise<void>;
   toggleLocked: (r: DailyRow, next: boolean) => Promise<void>;
   updateServiceMinutes: (r: DailyRow, next: number) => Promise<void>;
-  openKakaoMap: (name: string, lat?: number | null; lon?: number | null) => void;
+  openKakaoMap: (name: string, lat?: number | null, lon?: number | null) => void;
   setRows: React.Dispatch<React.SetStateAction<DailyRow[]>>;
 };
 
