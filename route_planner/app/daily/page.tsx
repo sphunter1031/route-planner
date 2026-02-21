@@ -21,7 +21,8 @@ type DailyRow = {
   travel_minutes?: number;
   source: string;
 
-  clients?: { id: string; name: string; lat: number | null; lon: number | null } | null;
+  // ✅ CHANGED (1): clients에 priority 필드 추가 (clients.priority 가정)
+  clients?: { id: string; name: string; lat: number | null; lon: number | null; priority?: boolean | null } | null;
 };
 
 type Stop = {
@@ -120,6 +121,8 @@ function normalizeDailyRows(data: unknown): DailyRow[] {
           name: String(r.clients.name),
           lat: r.clients.lat == null ? null : Number(r.clients.lat),
           lon: r.clients.lon == null ? null : Number(r.clients.lon),
+          // ✅ CHANGED (1-2): priority 파싱 추가
+          priority: r.clients.priority == null ? null : Boolean(r.clients.priority),
         }
       : null,
   }));
@@ -261,7 +264,7 @@ type SharedHandlers = {
   moveRow: (r: DailyRow, dir: "up" | "down") => Promise<void>;
   toggleLocked: (r: DailyRow, next: boolean) => Promise<void>;
   updateServiceMinutes: (r: DailyRow, next: number) => Promise<void>;
-  openKakaoMap: (name: string, lat?: number | null, lon?: number | null) => void;
+  openKakaoMap: (name: string, lat?: number | null; lon?: number | null) => void;
   setRows: React.Dispatch<React.SetStateAction<DailyRow[]>>;
 };
 
@@ -597,7 +600,7 @@ export default function DailyPage() {
         service_minutes_override,
         travel_minutes,
         source,
-        clients:clients(id,name,lat,lon)
+        clients:clients(id,name,lat,lon,priority) -- ✅ CHANGED (2): priority 포함
       `
       )
       .eq("week_start", weekStart)
@@ -871,12 +874,15 @@ export default function DailyPage() {
             ? Number(r.service_minutes_override)
             : Number(r.service_minutes ?? 0);
 
+        // ✅ CHANGED (3): priority를 실제 값으로 전달 (기존 false 고정 제거)
+        const prio = Boolean(r.clients?.priority);
+
         stops.push({
           id: r.client_id,
           lat,
           lng: lon,
           service_minutes: effService,
-          priority: false,
+          priority: prio, // ✅ 여기
           locked: Boolean(r.locked),
           seq: r.locked ? r.seq : null,
         });
