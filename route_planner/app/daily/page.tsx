@@ -249,6 +249,10 @@ function pillStyle(bg: string, border: string) {
     background: bg,
     lineHeight: "18px",
     whiteSpace: "nowrap" as const,
+
+    // ✅ 추가: 밝은 pill 배경 위 가독성 강제
+    color: "#111",            // 또는 "#000"
+    fontWeight: 700,          // optional (더 잘 보임)
   };
 }
 
@@ -440,6 +444,13 @@ function MobileCards({
                   border: "1px solid #ddd",
                   cursor: "pointer",
                   fontWeight: 800,
+
+                  // ✅ 추가/수정: 줄바꿈 방지 + 텍스트 축소
+                  whiteSpace: "nowrap",
+                  fontSize: 14,
+                  lineHeight: "14px",
+                  minWidth: 64,           // 버튼 폭 조금 확보 (원하면 70)
+                  textAlign: "center",
                 }}
               >
                 카카오
