@@ -21,7 +21,6 @@ type DailyRow = {
   travel_minutes?: number;
   source: string;
 
-  // ✅ CHANGED (1): clients에 priority 필드 추가 (clients.priority 가정)
   // ✅ CHANGED (NEW): Daily 현장 모달용 필드 추가
   clients?: {
     id: string;
@@ -136,10 +135,8 @@ function normalizeDailyRows(data: unknown): DailyRow[] {
           name: String(r.clients.name),
           lat: r.clients.lat == null ? null : Number(r.clients.lat),
           lon: r.clients.lon == null ? null : Number(r.clients.lon),
-          // ✅ CHANGED (1-2): priority 파싱 추가
           priority: r.clients.priority == null ? null : Boolean(r.clients.priority),
 
-          // ✅ CHANGED (NEW): Daily 현장 모달용 필드 파싱
           address_text: r.clients.address_text ?? null,
           notes: r.clients.notes ?? null,
           access_method: r.clients.access_method ?? null,
@@ -159,13 +156,11 @@ function getSupabaseEnv() {
     (process.env as any).VITE_SUPABASE_URL ||
     "";
 
-  // ✅ supabase-js / apikey 헤더에 들어갈 키 (sb_publishable_... 가능)
   const anonKey =
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
     (process.env as any).VITE_SUPABASE_ANON_KEY ||
     "";
 
-  // ✅ Functions Gateway 통과용 JWT (eyJ...)
   const anonJwt =
     (process.env as any).NEXT_PUBLIC_SUPABASE_ANON_JWT ||
     (process.env as any).VITE_SUPABASE_ANON_JWT ||
@@ -191,7 +186,6 @@ async function callEdgeFunction<T = any>(fnName: string, body: any): Promise<T> 
     "Content-Type": "application/json",
   };
 
-  // ✅ “게이트웨이 통과용 Authorization이 필요한” 함수만 allowlist
   const allowAnonBearer = new Set([
     "kakao-matrix",
     "apply-result",
@@ -203,7 +197,9 @@ async function callEdgeFunction<T = any>(fnName: string, body: any): Promise<T> 
     headers.Authorization = `Bearer ${session.access_token}`;
   } else if (allowAnonBearer.has(fnName)) {
     if (!anonJwt) {
-      throw new Error(`Missing NEXT_PUBLIC_SUPABASE_ANON_JWT (JWT needed for ${fnName} without session)`);
+      throw new Error(
+        `Missing NEXT_PUBLIC_SUPABASE_ANON_JWT (JWT needed for ${fnName} without session)`
+      );
     }
     headers.Authorization = `Bearer ${anonJwt}`;
   }
@@ -226,10 +222,9 @@ async function callEdgeFunction<T = any>(fnName: string, body: any): Promise<T> 
 
 // solver 응답에서 방문 순서를 최대한 추출
 function extractClientOrder(solved: any, client_ids: string[]) {
-  // ✅ (중요) solver.visit_order / solver.order 가 "string[]" 인 케이스를 먼저 잡는다
   const directKeys = [
-    "visit_order", // <- string[]
-    "order", // <- string[] (ORI1 포함/왕복 포함일 수 있음)
+    "visit_order",
+    "order",
     "client_order",
     "clients",
     "order_client_ids",
@@ -242,7 +237,7 @@ function extractClientOrder(solved: any, client_ids: string[]) {
     if (Array.isArray(v) && v.every((x) => typeof x === "string")) return v as string[];
   }
 
-  const indexKeys = ["route", "best_route", "sequence"]; // <- number[] 인덱스 케이스만 남김
+  const indexKeys = ["route", "best_route", "sequence"];
   for (const k of indexKeys) {
     const v = solved?.[k];
     if (Array.isArray(v) && v.every((x) => Number.isInteger(x))) {
@@ -273,18 +268,15 @@ function pillStyle(bg: string, border: string) {
     background: bg,
     lineHeight: "18px",
     whiteSpace: "nowrap" as const,
-
-    // ✅ 추가: 밝은 pill 배경 위 가독성 강제
-    color: "#111", // 또는 "#000"
-    fontWeight: 700, // optional (더 잘 보임)
+    color: "#111",
+    fontWeight: 700,
   };
 }
 
-// ✅ CHANGED (NEW): 전화번호 tel 링크를 안전하게 만들기
+// ✅ 전화번호 tel 링크
 function toTelHref(phone: string) {
   const raw = (phone ?? "").toString().trim();
   if (!raw) return "";
-  // +, 숫자만 남김 (공백/하이픈/괄호 제거)
   const cleaned = raw.replace(/[^\d+]/g, "");
   return cleaned ? `tel:${cleaned}` : "";
 }
@@ -303,8 +295,6 @@ type SharedHandlers = {
   updateServiceMinutes: (r: DailyRow, next: number) => Promise<void>;
   openKakaoMap: (name: string, lat?: number | null, lon?: number | null) => void;
   setRows: React.Dispatch<React.SetStateAction<DailyRow[]>>;
-
-  // ✅ CHANGED (NEW): 현장 모달 오픈 핸들러 추가
   openClientModal: (r: DailyRow) => void;
 };
 
@@ -365,7 +355,10 @@ function PcTable({
                   padding: "6px 10px",
                   borderRadius: 8,
                   border: "1px solid #ddd",
-                  cursor: optMode === "PREVIEW" || i === rows.length - 1 || r.locked ? "not-allowed" : "pointer",
+                  cursor:
+                    optMode === "PREVIEW" || i === rows.length - 1 || r.locked
+                      ? "not-allowed"
+                      : "pointer",
                   opacity: optMode === "PREVIEW" || i === rows.length - 1 || r.locked ? 0.4 : 1,
                 }}
               >
@@ -375,7 +368,6 @@ function PcTable({
 
             <td style={{ padding: "10px 0" }}>{r.seq}</td>
 
-            {/* ✅ CHANGED (NEW): 고객명 클릭 시 모달 오픈 */}
             <td style={{ padding: "10px 0", fontWeight: 700 }}>
               <span
                 onClick={() => openClientModal(r)}
@@ -410,7 +402,12 @@ function PcTable({
                   setRows((prev) =>
                     prev.map((x) =>
                       x.id === r.id
-                        ? { ...x, service_minutes_override: Number.isFinite(v) ? v : x.service_minutes_override }
+                        ? {
+                            ...x,
+                            service_minutes_override: Number.isFinite(v)
+                              ? v
+                              : x.service_minutes_override,
+                          }
                         : x
                     )
                   );
@@ -466,7 +463,7 @@ function MobileCards({
         return (
           <div
             key={r.id}
-            onClick={() => openClientModal(r)} // ✅ CHANGED (NEW): 카드 클릭 시 모달 오픈
+            onClick={() => openClientModal(r)}
             style={{
               border: "1px solid #eee",
               borderRadius: 14,
@@ -507,12 +504,10 @@ function MobileCards({
                   border: "1px solid #ddd",
                   cursor: "pointer",
                   fontWeight: 800,
-
-                  // ✅ 추가/수정: 줄바꿈 방지 + 텍스트 축소
                   whiteSpace: "nowrap",
                   fontSize: 14,
                   lineHeight: "14px",
-                  minWidth: 64, // 버튼 폭 조금 확보 (원하면 70)
+                  minWidth: 64,
                   textAlign: "center",
                 }}
               >
@@ -574,7 +569,10 @@ function MobileCards({
             </div>
 
             {/* service minutes */}
-            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }} onClick={(e) => e.stopPropagation()}>
+            <div
+              style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}
+              onClick={(e) => e.stopPropagation()}
+            >
               <span style={{ fontWeight: 800 }}>청소시간(분)</span>
               <input
                 type="number"
@@ -588,7 +586,12 @@ function MobileCards({
                   setRows((prev) =>
                     prev.map((x) =>
                       x.id === r.id
-                        ? { ...x, service_minutes_override: Number.isFinite(v) ? v : x.service_minutes_override }
+                        ? {
+                            ...x,
+                            service_minutes_override: Number.isFinite(v)
+                              ? v
+                              : x.service_minutes_override,
+                          }
                         : x
                     )
                   );
@@ -616,7 +619,7 @@ function MobileCards({
 export default function DailyPage() {
   const today = useMemo(() => new Date(), []);
 
-  // ✅ CHANGED (NEW): 상태 유지(LocalStorage) 키
+  // ✅ 상태 유지(LocalStorage) 키
   const LS_WEEK_START = "DAILY_WEEK_START";
   const LS_DOW = "DAILY_DOW";
   const LS_START_TIME = "DAILY_START_TIME";
@@ -636,7 +639,6 @@ export default function DailyPage() {
   const [dayStartTime, setDayStartTime] = useState(() => {
     if (typeof window === "undefined") return "09:00";
     const v = localStorage.getItem(LS_START_TIME);
-    // HH:MM 형태만 허용 (깨진 값 방지)
     if (v && /^\d{2}:\d{2}$/.test(v)) return v;
     return "09:00";
   });
@@ -645,7 +647,7 @@ export default function DailyPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
-  // ✅ 모바일/PC 분기 (추가된 부분)
+  // ✅ 모바일/PC 분기
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
     const update = () => setIsMobile(window.innerWidth <= 768);
@@ -654,7 +656,7 @@ export default function DailyPage() {
     return () => window.removeEventListener("resize", update);
   }, []);
 
-  // ✅ CHANGED (NEW): 현장 모달 상태/메모 편집 상태
+  // ✅ 현장 모달 상태/메모 편집 상태
   const [clientModalOpen, setClientModalOpen] = useState(false);
   const [clientModalRow, setClientModalRow] = useState<DailyRow | null>(null);
 
@@ -676,6 +678,22 @@ export default function DailyPage() {
     setNoteEditMode(false);
     setNoteDraft("");
   }
+
+  // ✅ FIX: 모달 열리면 body 스크롤/터치 잠금 (iOS 뒤 UI 비침/스크롤 방지)
+  useEffect(() => {
+    if (!clientModalOpen) return;
+
+    const prevOverflow = document.body.style.overflow;
+    const prevTouchAction = (document.body.style as any).touchAction;
+
+    document.body.style.overflow = "hidden";
+    (document.body.style as any).touchAction = "none";
+
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      (document.body.style as any).touchAction = prevTouchAction;
+    };
+  }, [clientModalOpen]);
 
   async function saveClientNotes() {
     const clientId = clientModalRow?.clients?.id;
@@ -741,14 +759,14 @@ export default function DailyPage() {
   const [resultId, setResultId] = useState<string>("");
   const [previewClientOrder, setPreviewClientOrder] = useState<string[]>([]);
 
-  // ✅ optimize-route에서 받은 matrix/client_ids를 PREVIEW 표시용으로 저장
+  // optimize-route에서 받은 matrix/client_ids를 PREVIEW 표시용으로 저장
   const [previewMatrix, setPreviewMatrix] = useState<number[][] | null>(null);
   const [previewAllClientIds, setPreviewAllClientIds] = useState<string[] | null>(null);
 
-  // ✅ CHANGED (NEW): APPLY 완료(=최적화 적용됨) 표시/버튼 제어 (B 로직)
+  // ✅ APPLY 완료 표시/버튼 제어
   const [appliedOptimized, setAppliedOptimized] = useState<boolean>(false);
 
-  // ✅ CHANGED (NEW): week/dow/time 변경 시 LocalStorage 저장 + applied flag 로딩
+  // week/dow/time 변경 시 LocalStorage 저장 + applied flag 로딩
   useEffect(() => {
     try {
       localStorage.setItem(LS_WEEK_START, weekStart);
@@ -808,7 +826,7 @@ export default function DailyPage() {
           manager_name,
           manager_phone,
           parking_info
-        ) -- ✅ CHANGED (2): Daily 현장 모달용 컬럼 포함
+        )
       `
       )
       .eq("week_start", weekStart)
@@ -854,7 +872,7 @@ export default function DailyPage() {
     return ordered.map((r, i) => ({ ...r, seq: i + 1 }));
   }, [liveList, optMode, previewClientOrder]);
 
-  // ✅ PREVIEW travel 계산: ORI1 -> 첫 방문지 -> ... (matrix 기반)
+  // PREVIEW travel 계산: ORI1 -> 첫 방문지 -> ...
   const previewTravelByClient = useMemo(() => {
     if (optMode !== "PREVIEW") return new Map<string, number>();
     if (!previewMatrix || !previewAllClientIds) return new Map<string, number>();
@@ -888,8 +906,6 @@ export default function DailyPage() {
     let cur = timeToMinutes(dayStartTime);
 
     return listForDisplay.map((r, idx) => {
-      // ✅ LIVE: DB travel_minutes 사용
-      // ✅ PREVIEW: matrix 기반 travel 사용
       const travel =
         optMode === "PREVIEW"
           ? Number(previewTravelByClient.get(r.client_id) ?? 0)
@@ -932,7 +948,6 @@ export default function DailyPage() {
     setPreviewMatrix(null);
     setPreviewAllClientIds(null);
 
-    // ✅ CHANGED (NEW): 주 계획 가져오면 "최적화 적용" 상태는 깨짐
     markAppliedOptimized(false);
 
     await fetchDaily();
@@ -958,9 +973,7 @@ export default function DailyPage() {
 
       if (error) throw new Error(error.message);
 
-      // ✅ CHANGED (NEW): 수동 변경 발생 => 다시 최적화 가능 상태로
       markAppliedOptimized(false);
-
       await fetchDaily();
     } catch (e: any) {
       setErr(e?.message ?? "Unknown error");
@@ -992,9 +1005,7 @@ export default function DailyPage() {
 
       if (error) throw new Error(error.message);
 
-      // ✅ CHANGED (NEW): 수동 변경 발생 => 다시 최적화 가능 상태로
       markAppliedOptimized(false);
-
       await fetchDaily();
     } catch (e: any) {
       setErr(e?.message ?? "Unknown error");
@@ -1038,9 +1049,7 @@ export default function DailyPage() {
 
       await swapSeq_Rpc(sorted[idx], sorted[swapWith]);
 
-      // ✅ CHANGED (NEW): 수동 변경 발생 => 다시 최적화 가능 상태로
       markAppliedOptimized(false);
-
       await fetchDaily();
     } catch (e: any) {
       setErr(e?.message ?? "Unknown error");
@@ -1049,22 +1058,18 @@ export default function DailyPage() {
     }
   };
 
-  // ✅ CHANGED (NEW): Kakao Map - 모바일에서는 앱 스킴 우선 시도 후 fallback
+  // ✅ Kakao Map - 모바일에서는 앱 스킴 우선 시도 후 fallback
   const openKakaoMap = (name: string, lat?: number | null, lon?: number | null) => {
     const isMobileUA =
       typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-    // 좌표 우선(정확), 없으면 q 검색으로 fallback
     if (isFiniteNumber(lat) && isFiniteNumber(lon)) {
       if (isMobileUA) {
-        // kakaomap 앱 스킴 (look)
         const scheme = `kakaomap://look?p=${lat},${lon}`;
         const web = `https://map.kakao.com/link/map/${encodeURIComponent(name)},${lat},${lon}`;
 
-        // 앱 시도
         window.location.href = scheme;
 
-        // fallback (앱 없거나 실패 시)
         window.setTimeout(() => {
           window.open(web, "_blank", "noopener,noreferrer");
         }, 700);
@@ -1076,7 +1081,6 @@ export default function DailyPage() {
       return;
     }
 
-    // 좌표 없을 때
     const web = `https://map.kakao.com/?q=${encodeURIComponent(name)}`;
     window.open(web, "_blank", "noopener,noreferrer");
   };
@@ -1089,7 +1093,6 @@ export default function DailyPage() {
     try {
       if (liveList.length < 2) throw new Error("최소 2개 이상 필요");
 
-      // 1) stops 만들기: ORI1 + clients
       const stops: Stop[] = [];
 
       stops.push({
@@ -1118,7 +1121,6 @@ export default function DailyPage() {
             ? Number(r.service_minutes_override)
             : Number(r.service_minutes ?? 0);
 
-        // ✅ CHANGED (3): priority를 실제 값으로 전달 (기존 false 고정 제거)
         const prio = Boolean(r.clients?.priority);
 
         stops.push({
@@ -1126,13 +1128,12 @@ export default function DailyPage() {
           lat,
           lng: lon,
           service_minutes: effService,
-          priority: prio, // ✅ 여기
+          priority: prio,
           locked: Boolean(r.locked),
           seq: r.locked ? r.seq : null,
         });
       }
 
-      // 2) optimize-route 호출
       const departAt = `${planDate}T${dayStartTime}:00`;
       const opt: any = await callEdgeFunction("optimize-route", {
         plan_date: planDate,
@@ -1141,7 +1142,6 @@ export default function DailyPage() {
         time_limit_seconds: 3,
       });
 
-      // ✅ 너가 원한 디버그 로그 “여기”가 정답 위치
       console.log("opt.ok", opt?.ok);
       console.log("client_ids", opt?.client_ids);
       console.log("matrix row0", opt?.matrix_minutes?.[0]);
@@ -1156,18 +1156,14 @@ export default function DailyPage() {
         throw new Error("optimize-route: invalid client_ids returned");
       }
 
-      // ✅ PREVIEW 표시용으로 matrix/client_ids 저장
       if (Array.isArray(opt.matrix_minutes)) setPreviewMatrix(opt.matrix_minutes);
       setPreviewAllClientIds(client_ids);
 
-      // 3) solver 결과에서 순서 추출
       let order = extractClientOrder(solved, client_ids);
 
-      // ✅ ORI1 제거
       order = order.filter((x) => x !== ORIGIN_ID);
       if (order.length < 2) order = client_ids.filter((x) => x !== ORIGIN_ID);
 
-      // 4) optimize_results에 저장 → result_id 받기
       const saved = await callEdgeFunction<SaveOptimizeResp>("save-optimize-result", {
         plan_date: planDate,
         clients: order,
@@ -1190,7 +1186,7 @@ export default function DailyPage() {
     }
   };
 
-  // Apply: apply-result로 daily_plan_items 반영
+  // Apply
   const apply = async () => {
     setErr(null);
     setLoading(true);
@@ -1208,14 +1204,12 @@ export default function DailyPage() {
 
       if (!applied?.ok) throw new Error(applied?.error ? JSON.stringify(applied.error) : "apply-result failed");
 
-      // ✅ LIVE로 돌아갈 땐 preview matrix도 비움
       setOptMode("LIVE");
       setResultId("");
       setPreviewClientOrder([]);
       setPreviewMatrix(null);
       setPreviewAllClientIds(null);
 
-      // ✅ CHANGED (NEW): Apply 완료 => "최적화 적용됨" 상태 저장 (B 로직 핵심)
       markAppliedOptimized(true);
 
       await fetchDaily();
@@ -1243,7 +1237,7 @@ export default function DailyPage() {
     }
   };
 
-  // ✅ CHANGED (NEW): 모달 렌더링용 값 정리
+  // 모달 렌더링용 값
   const modalClient = clientModalRow?.clients ?? null;
   const modalName = modalClient?.name ?? "";
   const modalAddress = modalClient?.address_text ?? "";
@@ -1252,7 +1246,7 @@ export default function DailyPage() {
     return s.trim() ? s : "-";
   };
 
-  // ✅ CHANGED (NEW): B 로직 - Optimize 버튼 표시 조건
+  // ✅ B 로직: Optimize 버튼 표시 조건
   const showOptimizeButton = optMode === "LIVE" && !appliedOptimized;
 
   return (
@@ -1297,7 +1291,6 @@ export default function DailyPage() {
           주 계획에서 가져오기
         </button>
 
-        {/* ✅ CHANGED (NEW): B 로직 - Apply된 LIVE 화면에서는 Optimize 버튼 숨김 */}
         {showOptimizeButton && (
           <button
             onClick={optimize}
@@ -1309,7 +1302,6 @@ export default function DailyPage() {
           </button>
         )}
 
-        {/* ✅ CHANGED (NEW): Apply 완료 상태 표시 (작게) */}
         {optMode === "LIVE" && appliedOptimized && (
           <span style={pillStyle("#f7fff7", "#d9f2d9")} title="Apply 완료. 수동 수정하면 다시 최적화 가능">
             최적화 적용됨
@@ -1396,32 +1388,38 @@ export default function DailyPage() {
         </section>
       )}
 
-      {/* ✅ CHANGED (NEW): 현장 정보 모달 (notes만 편집 가능) */}
+      {/* ✅ FIXED: 현장 정보 모달 (배경만 어둡게 + iOS/모바일 비침/흐림 방지) */}
       {clientModalOpen && modalClient && (
         <div
           onClick={closeClientModal}
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(0,0,0,0.45)",
-            zIndex: 9999,
+            backgroundColor: "rgba(0,0,0,0.55)",
+            zIndex: 2147483647,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             padding: 16,
+            overscrollBehavior: "contain",
           }}
         >
           <div
             onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
             style={{
-              width: "min(640px, 100%)",
+              width: "min(680px, 100%)",
               maxHeight: "85vh",
               overflow: "auto",
-              background: "#fff",
+              backgroundColor: "#fff",
               borderRadius: 16,
               padding: 16,
               boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
               position: "relative",
+              opacity: 1,
+              isolation: "isolate",
+              wordBreak: "keep-all",
             }}
           >
             <button
@@ -1433,9 +1431,11 @@ export default function DailyPage() {
                 top: 10,
                 border: "none",
                 background: "transparent",
-                fontSize: 20,
+                fontSize: 22,
                 cursor: noteSaving ? "not-allowed" : "pointer",
                 padding: 6,
+                lineHeight: "22px",
+                color: "#111",
               }}
               disabled={noteSaving}
             >
@@ -1443,12 +1443,21 @@ export default function DailyPage() {
             </button>
 
             {/* Header */}
-            <div style={{ paddingRight: 28 }}>
-              <div style={{ fontSize: 22, fontWeight: 900, lineHeight: "28px", wordBreak: "keep-all" }}>
+            <div style={{ paddingRight: 32 }}>
+              <div style={{ fontSize: 22, fontWeight: 900, lineHeight: "28px", color: "#111" }}>
                 {modalName}
               </div>
+
               {modalAddress ? (
-                <div style={{ marginTop: 6, fontSize: 14, opacity: 0.8, lineHeight: "20px", whiteSpace: "pre-wrap" }}>
+                <div
+                  style={{
+                    marginTop: 6,
+                    fontSize: 14,
+                    lineHeight: "20px",
+                    color: "#444",
+                    whiteSpace: "pre-wrap",
+                  }}
+                >
                   {modalAddress}
                 </div>
               ) : null}
@@ -1474,29 +1483,35 @@ export default function DailyPage() {
                       border: "1px solid #eee",
                       borderRadius: 14,
                       padding: 12,
+                      backgroundColor: "#fff",
                     }}
                   >
-                    <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 6 }}>{label}</div>
+                    <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 6, color: "#111" }}>
+                      {label}
+                    </div>
 
                     {isPhone ? (
-                      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                        <div style={{ fontSize: 16, lineHeight: "22px", whiteSpace: "pre-wrap" }}>{vOrDash(value)}</div>
+                      <div style={{ display: "flex", gap: 12, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
+                        <div style={{ fontSize: 16, lineHeight: "22px", whiteSpace: "pre-wrap", color: "#111", flex: "1 1 auto" }}>
+                          {vOrDash(value)}
+                        </div>
 
                         {telHref ? (
                           <a
                             href={telHref}
                             onClick={(e) => e.stopPropagation()}
                             style={{
-                              marginLeft: "auto",
-                              padding: "10px 12px",
+                              flex: "0 0 auto",
+                              padding: "10px 14px",
                               borderRadius: 12,
                               border: "1px solid #111",
-                              background: "#111",
+                              backgroundColor: "#111",
                               color: "#fff",
                               fontWeight: 900,
                               textDecoration: "none",
-                              fontSize: 15,
                               whiteSpace: "nowrap",
+                              fontSize: 15,
+                              lineHeight: "15px",
                             }}
                           >
                             전화걸기
@@ -1504,7 +1519,9 @@ export default function DailyPage() {
                         ) : null}
                       </div>
                     ) : (
-                      <div style={{ fontSize: 16, lineHeight: "22px", whiteSpace: "pre-wrap" }}>{vOrDash(value)}</div>
+                      <div style={{ fontSize: 16, lineHeight: "22px", whiteSpace: "pre-wrap", color: "#111" }}>
+                        {vOrDash(value)}
+                      </div>
                     )}
                   </div>
                 );
@@ -1513,7 +1530,7 @@ export default function DailyPage() {
 
             {/* Notes */}
             <div style={{ marginTop: 14, borderTop: "1px solid #eee", paddingTop: 14 }}>
-              <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 8 }}>메모</div>
+              <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 8, color: "#111" }}>메모</div>
 
               {!noteEditMode ? (
                 <div
@@ -1524,7 +1541,8 @@ export default function DailyPage() {
                     fontSize: 16,
                     lineHeight: "22px",
                     whiteSpace: "pre-wrap",
-                    background: "#fafafa",
+                    backgroundColor: "#fafafa",
+                    color: "#111",
                   }}
                 >
                   {vOrDash(modalClient.notes)}
@@ -1544,6 +1562,8 @@ export default function DailyPage() {
                     lineHeight: "22px",
                     outline: "none",
                     resize: "vertical",
+                    color: "#111",
+                    backgroundColor: "#fff",
                   }}
                 />
               )}
@@ -1555,8 +1575,8 @@ export default function DailyPage() {
                     style={{
                       padding: "12px 14px",
                       borderRadius: 14,
-                      border: "1px solid #ddd",
-                      background: "#111",
+                      border: "1px solid #111",
+                      backgroundColor: "#111",
                       color: "#fff",
                       fontWeight: 900,
                       cursor: "pointer",
@@ -1577,11 +1597,12 @@ export default function DailyPage() {
                         padding: "12px 14px",
                         borderRadius: 14,
                         border: "1px solid #ddd",
-                        background: "#fff",
+                        backgroundColor: "#fff",
                         fontWeight: 900,
                         cursor: noteSaving ? "not-allowed" : "pointer",
                         fontSize: 16,
                         opacity: noteSaving ? 0.6 : 1,
+                        color: "#111",
                       }}
                     >
                       취소
@@ -1594,7 +1615,7 @@ export default function DailyPage() {
                         padding: "12px 14px",
                         borderRadius: 14,
                         border: "1px solid #111",
-                        background: "#111",
+                        backgroundColor: "#111",
                         color: "#fff",
                         fontWeight: 900,
                         cursor: noteSaving ? "not-allowed" : "pointer",
