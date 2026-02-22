@@ -22,7 +22,22 @@ type DailyRow = {
   source: string;
 
   // ✅ CHANGED (1): clients에 priority 필드 추가 (clients.priority 가정)
-  clients?: { id: string; name: string; lat: number | null; lon: number | null; priority?: boolean | null } | null;
+  // ✅ CHANGED (NEW): Daily 현장 모달용 필드 추가
+  clients?: {
+    id: string;
+    name: string;
+    lat: number | null;
+    lon: number | null;
+    priority?: boolean | null;
+
+    address_text?: string | null;
+    notes?: string | null;
+    access_method?: string | null;
+    access_code?: string | null;
+    manager_name?: string | null;
+    manager_phone?: string | null;
+    parking_info?: string | null;
+  } | null;
 };
 
 type Stop = {
@@ -123,6 +138,15 @@ function normalizeDailyRows(data: unknown): DailyRow[] {
           lon: r.clients.lon == null ? null : Number(r.clients.lon),
           // ✅ CHANGED (1-2): priority 파싱 추가
           priority: r.clients.priority == null ? null : Boolean(r.clients.priority),
+
+          // ✅ CHANGED (NEW): Daily 현장 모달용 필드 파싱
+          address_text: r.clients.address_text ?? null,
+          notes: r.clients.notes ?? null,
+          access_method: r.clients.access_method ?? null,
+          access_code: r.clients.access_code ?? null,
+          manager_name: r.clients.manager_name ?? null,
+          manager_phone: r.clients.manager_phone ?? null,
+          parking_info: r.clients.parking_info ?? null,
         }
       : null,
   }));
@@ -251,9 +275,18 @@ function pillStyle(bg: string, border: string) {
     whiteSpace: "nowrap" as const,
 
     // ✅ 추가: 밝은 pill 배경 위 가독성 강제
-    color: "#111",            // 또는 "#000"
-    fontWeight: 700,          // optional (더 잘 보임)
+    color: "#111", // 또는 "#000"
+    fontWeight: 700, // optional (더 잘 보임)
   };
+}
+
+// ✅ CHANGED (NEW): 전화번호 tel 링크를 안전하게 만들기
+function toTelHref(phone: string) {
+  const raw = (phone ?? "").toString().trim();
+  if (!raw) return "";
+  // +, 숫자만 남김 (공백/하이픈/괄호 제거)
+  const cleaned = raw.replace(/[^\d+]/g, "");
+  return cleaned ? `tel:${cleaned}` : "";
 }
 
 type ComputedRow = DailyRow & {
@@ -270,6 +303,9 @@ type SharedHandlers = {
   updateServiceMinutes: (r: DailyRow, next: number) => Promise<void>;
   openKakaoMap: (name: string, lat?: number | null, lon?: number | null) => void;
   setRows: React.Dispatch<React.SetStateAction<DailyRow[]>>;
+
+  // ✅ CHANGED (NEW): 현장 모달 오픈 핸들러 추가
+  openClientModal: (r: DailyRow) => void;
 };
 
 function PcTable({
@@ -280,6 +316,7 @@ function PcTable({
   updateServiceMinutes,
   openKakaoMap,
   setRows,
+  openClientModal,
 }: { rows: ComputedRow[] } & SharedHandlers) {
   return (
     <table style={{ width: "100%", marginTop: 10, borderCollapse: "collapse" }}>
@@ -302,7 +339,10 @@ function PcTable({
           <tr key={r.id} style={{ borderBottom: "1px solid #f3f3f3" }}>
             <td style={{ padding: "10px 0" }}>
               <button
-                onClick={() => moveRow(r, "up")}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  moveRow(r, "up");
+                }}
                 disabled={optMode === "PREVIEW" || i === 0 || r.locked}
                 style={{
                   marginRight: 6,
@@ -316,7 +356,10 @@ function PcTable({
                 ↑
               </button>
               <button
-                onClick={() => moveRow(r, "down")}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  moveRow(r, "down");
+                }}
                 disabled={optMode === "PREVIEW" || i === rows.length - 1 || r.locked}
                 style={{
                   padding: "6px 10px",
@@ -332,13 +375,23 @@ function PcTable({
 
             <td style={{ padding: "10px 0" }}>{r.seq}</td>
 
-            <td style={{ padding: "10px 0", fontWeight: 700 }}>{r.clients?.name ?? ""}</td>
+            {/* ✅ CHANGED (NEW): 고객명 클릭 시 모달 오픈 */}
+            <td style={{ padding: "10px 0", fontWeight: 700 }}>
+              <span
+                onClick={() => openClientModal(r)}
+                style={{ cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 3 }}
+                title="현장 정보 보기"
+              >
+                {r.clients?.name ?? ""}
+              </span>
+            </td>
 
             <td style={{ padding: "10px 0" }}>
               <input
                 type="checkbox"
                 checked={r.locked}
                 disabled={optMode === "PREVIEW"}
+                onClick={(e) => e.stopPropagation()}
                 onChange={(e) => toggleLocked(r, e.target.checked)}
               />
             </td>
@@ -351,6 +404,7 @@ function PcTable({
                 step={1}
                 value={r._effective_service_minutes}
                 disabled={optMode === "PREVIEW"}
+                onClick={(e) => e.stopPropagation()}
                 onChange={(e) => {
                   const v = Number(e.target.value);
                   setRows((prev) =>
@@ -377,7 +431,10 @@ function PcTable({
 
             <td style={{ padding: "10px 0" }}>
               <button
-                onClick={() => openKakaoMap(r.clients?.name ?? r.client_id, r.clients?.lat, r.clients?.lon)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openKakaoMap(r.clients?.name ?? r.client_id, r.clients?.lat, r.clients?.lon);
+                }}
                 style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #ddd", cursor: "pointer" }}
               >
                 Kakao Map
@@ -398,6 +455,7 @@ function MobileCards({
   updateServiceMinutes,
   openKakaoMap,
   setRows,
+  openClientModal,
 }: { rows: ComputedRow[] } & SharedHandlers) {
   return (
     <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 12 }}>
@@ -408,6 +466,7 @@ function MobileCards({
         return (
           <div
             key={r.id}
+            onClick={() => openClientModal(r)} // ✅ CHANGED (NEW): 카드 클릭 시 모달 오픈
             style={{
               border: "1px solid #eee",
               borderRadius: 14,
@@ -415,6 +474,7 @@ function MobileCards({
               display: "flex",
               flexDirection: "column",
               gap: 10,
+              cursor: "pointer",
             }}
           >
             {/* header */}
@@ -437,7 +497,10 @@ function MobileCards({
 
               {/* nav */}
               <button
-                onClick={() => openKakaoMap(name, r.clients?.lat, r.clients?.lon)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openKakaoMap(name, r.clients?.lat, r.clients?.lon);
+                }}
                 style={{
                   padding: "10px 12px",
                   borderRadius: 12,
@@ -449,7 +512,7 @@ function MobileCards({
                   whiteSpace: "nowrap",
                   fontSize: 14,
                   lineHeight: "14px",
-                  minWidth: 64,           // 버튼 폭 조금 확보 (원하면 70)
+                  minWidth: 64, // 버튼 폭 조금 확보 (원하면 70)
                   textAlign: "center",
                 }}
               >
@@ -460,7 +523,10 @@ function MobileCards({
             {/* controls */}
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
               <button
-                onClick={() => moveRow(r, "up")}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  moveRow(r, "up");
+                }}
                 disabled={optMode === "PREVIEW" || i === 0 || locked}
                 style={{
                   padding: "10px 12px",
@@ -475,7 +541,10 @@ function MobileCards({
               </button>
 
               <button
-                onClick={() => moveRow(r, "down")}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  moveRow(r, "down");
+                }}
                 disabled={optMode === "PREVIEW" || i === rows.length - 1 || locked}
                 style={{
                   padding: "10px 12px",
@@ -489,7 +558,10 @@ function MobileCards({
                 ↓ 아래
               </button>
 
-              <label style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
+              <label
+                style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}
+                onClick={(e) => e.stopPropagation()}
+              >
                 <span style={{ fontWeight: 800 }}>고정</span>
                 <input
                   type="checkbox"
@@ -502,7 +574,7 @@ function MobileCards({
             </div>
 
             {/* service minutes */}
-            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }} onClick={(e) => e.stopPropagation()}>
               <span style={{ fontWeight: 800 }}>청소시간(분)</span>
               <input
                 type="number"
@@ -543,9 +615,31 @@ function MobileCards({
 
 export default function DailyPage() {
   const today = useMemo(() => new Date(), []);
-  const [weekStart, setWeekStart] = useState<string>(() => getWeekStartMonday(today));
-  const [dow, setDow] = useState<number>(() => getIsoDow(today));
-  const [dayStartTime, setDayStartTime] = useState("09:00");
+
+  // ✅ CHANGED (NEW): 상태 유지(LocalStorage) 키
+  const LS_WEEK_START = "DAILY_WEEK_START";
+  const LS_DOW = "DAILY_DOW";
+  const LS_START_TIME = "DAILY_START_TIME";
+  const LS_APPLIED_PREFIX = "DAILY_APPLIED_OPTIMIZED:"; // + `${weekStart}:${dow}`
+
+  const [weekStart, setWeekStart] = useState<string>(() => {
+    if (typeof window === "undefined") return getWeekStartMonday(today);
+    const v = localStorage.getItem(LS_WEEK_START);
+    return v && v.trim() ? v : getWeekStartMonday(today);
+  });
+  const [dow, setDow] = useState<number>(() => {
+    if (typeof window === "undefined") return getIsoDow(today);
+    const v = localStorage.getItem(LS_DOW);
+    const n = v ? Number(v) : NaN;
+    return Number.isFinite(n) ? n : getIsoDow(today);
+  });
+  const [dayStartTime, setDayStartTime] = useState(() => {
+    if (typeof window === "undefined") return "09:00";
+    const v = localStorage.getItem(LS_START_TIME);
+    // HH:MM 형태만 허용 (깨진 값 방지)
+    if (v && /^\d{2}:\d{2}$/.test(v)) return v;
+    return "09:00";
+  });
 
   const [rows, setRows] = useState<DailyRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -559,6 +653,71 @@ export default function DailyPage() {
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
   }, []);
+
+  // ✅ CHANGED (NEW): 현장 모달 상태/메모 편집 상태
+  const [clientModalOpen, setClientModalOpen] = useState(false);
+  const [clientModalRow, setClientModalRow] = useState<DailyRow | null>(null);
+
+  const [noteEditMode, setNoteEditMode] = useState(false);
+  const [noteDraft, setNoteDraft] = useState<string>("");
+  const [noteSaving, setNoteSaving] = useState(false);
+
+  function openClientModal(r: DailyRow) {
+    setClientModalRow(r);
+    setClientModalOpen(true);
+    setNoteEditMode(false);
+    setNoteDraft(r.clients?.notes ?? "");
+  }
+
+  function closeClientModal() {
+    if (noteSaving) return;
+    setClientModalOpen(false);
+    setClientModalRow(null);
+    setNoteEditMode(false);
+    setNoteDraft("");
+  }
+
+  async function saveClientNotes() {
+    const clientId = clientModalRow?.clients?.id;
+    if (!clientId) return;
+
+    setNoteSaving(true);
+    setErr(null);
+
+    try {
+      const payload = { notes: noteDraft && noteDraft.trim() ? noteDraft : null };
+
+      const { error } = await supabase.from("clients").update(payload).eq("id", clientId);
+      if (error) throw new Error(error.message);
+
+      // 로컬 state 즉시 반영 (모달 + 리스트)
+      setRows((prev) =>
+        prev.map((x) =>
+          x.client_id === clientId
+            ? {
+                ...x,
+                clients: x.clients ? { ...x.clients, notes: payload.notes as any } : x.clients,
+              }
+            : x
+        )
+      );
+
+      setClientModalRow((prev) =>
+        prev
+          ? {
+              ...prev,
+              clients: prev.clients ? { ...prev.clients, notes: payload.notes as any } : prev.clients,
+            }
+          : prev
+      );
+
+      setNoteEditMode(false);
+    } catch (e: any) {
+      alert("메모 저장 실패: " + (e?.message ?? "Unknown error"));
+    } finally {
+      setNoteSaving(false);
+    }
+  }
 
   // ORI1 좌표 (로컬 저장)
   const [homeLat, setHomeLat] = useState<number>(() => {
@@ -586,6 +745,31 @@ export default function DailyPage() {
   const [previewMatrix, setPreviewMatrix] = useState<number[][] | null>(null);
   const [previewAllClientIds, setPreviewAllClientIds] = useState<string[] | null>(null);
 
+  // ✅ CHANGED (NEW): APPLY 완료(=최적화 적용됨) 표시/버튼 제어 (B 로직)
+  const [appliedOptimized, setAppliedOptimized] = useState<boolean>(false);
+
+  // ✅ CHANGED (NEW): week/dow/time 변경 시 LocalStorage 저장 + applied flag 로딩
+  useEffect(() => {
+    try {
+      localStorage.setItem(LS_WEEK_START, weekStart);
+      localStorage.setItem(LS_DOW, String(dow));
+      localStorage.setItem(LS_START_TIME, dayStartTime);
+
+      const key = `${LS_APPLIED_PREFIX}${weekStart}:${dow}`;
+      const v = localStorage.getItem(key);
+      setAppliedOptimized(v === "1");
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekStart, dow, dayStartTime]);
+
+  const markAppliedOptimized = (next: boolean) => {
+    setAppliedOptimized(next);
+    try {
+      const key = `${LS_APPLIED_PREFIX}${weekStart}:${dow}`;
+      localStorage.setItem(key, next ? "1" : "0");
+    } catch {}
+  };
+
   const effectiveServiceMinutes = (r: DailyRow) =>
     Number.isFinite(r.service_minutes_override as number)
       ? Number(r.service_minutes_override)
@@ -611,7 +795,20 @@ export default function DailyPage() {
         service_minutes_override,
         travel_minutes,
         source,
-        clients:clients(id,name,lat,lon,priority) -- ✅ CHANGED (2): priority 포함
+        clients:clients(
+          id,
+          name,
+          lat,
+          lon,
+          priority,
+          address_text,
+          notes,
+          access_method,
+          access_code,
+          manager_name,
+          manager_phone,
+          parking_info
+        ) -- ✅ CHANGED (2): Daily 현장 모달용 컬럼 포함
       `
       )
       .eq("week_start", weekStart)
@@ -735,6 +932,9 @@ export default function DailyPage() {
     setPreviewMatrix(null);
     setPreviewAllClientIds(null);
 
+    // ✅ CHANGED (NEW): 주 계획 가져오면 "최적화 적용" 상태는 깨짐
+    markAppliedOptimized(false);
+
     await fetchDaily();
   };
 
@@ -757,6 +957,10 @@ export default function DailyPage() {
         .eq("day_of_week", r.day_of_week);
 
       if (error) throw new Error(error.message);
+
+      // ✅ CHANGED (NEW): 수동 변경 발생 => 다시 최적화 가능 상태로
+      markAppliedOptimized(false);
+
       await fetchDaily();
     } catch (e: any) {
       setErr(e?.message ?? "Unknown error");
@@ -787,6 +991,10 @@ export default function DailyPage() {
         .eq("day_of_week", r.day_of_week);
 
       if (error) throw new Error(error.message);
+
+      // ✅ CHANGED (NEW): 수동 변경 발생 => 다시 최적화 가능 상태로
+      markAppliedOptimized(false);
+
       await fetchDaily();
     } catch (e: any) {
       setErr(e?.message ?? "Unknown error");
@@ -829,6 +1037,10 @@ export default function DailyPage() {
       if (swapWith < 0 || swapWith >= sorted.length) return;
 
       await swapSeq_Rpc(sorted[idx], sorted[swapWith]);
+
+      // ✅ CHANGED (NEW): 수동 변경 발생 => 다시 최적화 가능 상태로
+      markAppliedOptimized(false);
+
       await fetchDaily();
     } catch (e: any) {
       setErr(e?.message ?? "Unknown error");
@@ -837,15 +1049,36 @@ export default function DailyPage() {
     }
   };
 
-  // ✅ Kakao Map: 좌표 우선(정확), 없으면 q 검색으로 fallback
+  // ✅ CHANGED (NEW): Kakao Map - 모바일에서는 앱 스킴 우선 시도 후 fallback
   const openKakaoMap = (name: string, lat?: number | null, lon?: number | null) => {
+    const isMobileUA =
+      typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+    // 좌표 우선(정확), 없으면 q 검색으로 fallback
     if (isFiniteNumber(lat) && isFiniteNumber(lon)) {
+      if (isMobileUA) {
+        // kakaomap 앱 스킴 (look)
+        const scheme = `kakaomap://look?p=${lat},${lon}`;
+        const web = `https://map.kakao.com/link/map/${encodeURIComponent(name)},${lat},${lon}`;
+
+        // 앱 시도
+        window.location.href = scheme;
+
+        // fallback (앱 없거나 실패 시)
+        window.setTimeout(() => {
+          window.open(web, "_blank", "noopener,noreferrer");
+        }, 700);
+        return;
+      }
+
       const url = `https://map.kakao.com/link/map/${encodeURIComponent(name)},${lat},${lon}`;
       window.open(url, "_blank", "noopener,noreferrer");
       return;
     }
-    const url = `https://map.kakao.com/?q=${encodeURIComponent(name)}`;
-    window.open(url, "_blank", "noopener,noreferrer");
+
+    // 좌표 없을 때
+    const web = `https://map.kakao.com/?q=${encodeURIComponent(name)}`;
+    window.open(web, "_blank", "noopener,noreferrer");
   };
 
   // Optimize: optimize-route → save-optimize-result → PREVIEW
@@ -982,6 +1215,9 @@ export default function DailyPage() {
       setPreviewMatrix(null);
       setPreviewAllClientIds(null);
 
+      // ✅ CHANGED (NEW): Apply 완료 => "최적화 적용됨" 상태 저장 (B 로직 핵심)
+      markAppliedOptimized(true);
+
       await fetchDaily();
     } catch (e: any) {
       setErr(e?.message ?? "Unknown error");
@@ -1006,6 +1242,18 @@ export default function DailyPage() {
       setLoading(false);
     }
   };
+
+  // ✅ CHANGED (NEW): 모달 렌더링용 값 정리
+  const modalClient = clientModalRow?.clients ?? null;
+  const modalName = modalClient?.name ?? "";
+  const modalAddress = modalClient?.address_text ?? "";
+  const vOrDash = (v: any) => {
+    const s = (v ?? "").toString();
+    return s.trim() ? s : "-";
+  };
+
+  // ✅ CHANGED (NEW): B 로직 - Optimize 버튼 표시 조건
+  const showOptimizeButton = optMode === "LIVE" && !appliedOptimized;
 
   return (
     <main style={{ padding: 16, maxWidth: 1200, margin: "0 auto" }}>
@@ -1049,14 +1297,24 @@ export default function DailyPage() {
           주 계획에서 가져오기
         </button>
 
-        <button
-          onClick={optimize}
-          disabled={loading || liveList.length < 2}
-          title={liveList.length < 2 ? "최소 2개 이상 필요" : "optimize-route → preview 생성"}
-          style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #ddd", cursor: "pointer" }}
-        >
-          최적화
-        </button>
+        {/* ✅ CHANGED (NEW): B 로직 - Apply된 LIVE 화면에서는 Optimize 버튼 숨김 */}
+        {showOptimizeButton && (
+          <button
+            onClick={optimize}
+            disabled={loading || liveList.length < 2}
+            title={liveList.length < 2 ? "최소 2개 이상 필요" : "optimize-route → preview 생성"}
+            style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #ddd", cursor: "pointer" }}
+          >
+            최적화
+          </button>
+        )}
+
+        {/* ✅ CHANGED (NEW): Apply 완료 상태 표시 (작게) */}
+        {optMode === "LIVE" && appliedOptimized && (
+          <span style={pillStyle("#f7fff7", "#d9f2d9")} title="Apply 완료. 수동 수정하면 다시 최적화 가능">
+            최적화 적용됨
+          </span>
+        )}
 
         {optMode === "PREVIEW" && (
           <>
@@ -1111,6 +1369,7 @@ export default function DailyPage() {
               updateServiceMinutes={updateServiceMinutes}
               openKakaoMap={openKakaoMap}
               setRows={setRows}
+              openClientModal={openClientModal}
             />
           ) : (
             <PcTable
@@ -1121,6 +1380,7 @@ export default function DailyPage() {
               updateServiceMinutes={updateServiceMinutes}
               openKakaoMap={openKakaoMap}
               setRows={setRows}
+              openClientModal={openClientModal}
             />
           )}
 
@@ -1134,6 +1394,222 @@ export default function DailyPage() {
             * PREVIEW 모드에서는 수정/이동 금지 / Apply로 확정
           </div>
         </section>
+      )}
+
+      {/* ✅ CHANGED (NEW): 현장 정보 모달 (notes만 편집 가능) */}
+      {clientModalOpen && modalClient && (
+        <div
+          onClick={closeClientModal}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.45)",
+            zIndex: 9999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "min(640px, 100%)",
+              maxHeight: "85vh",
+              overflow: "auto",
+              background: "#fff",
+              borderRadius: 16,
+              padding: 16,
+              boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
+              position: "relative",
+            }}
+          >
+            <button
+              onClick={closeClientModal}
+              aria-label="close"
+              style={{
+                position: "absolute",
+                right: 10,
+                top: 10,
+                border: "none",
+                background: "transparent",
+                fontSize: 20,
+                cursor: noteSaving ? "not-allowed" : "pointer",
+                padding: 6,
+              }}
+              disabled={noteSaving}
+            >
+              ✕
+            </button>
+
+            {/* Header */}
+            <div style={{ paddingRight: 28 }}>
+              <div style={{ fontSize: 22, fontWeight: 900, lineHeight: "28px", wordBreak: "keep-all" }}>
+                {modalName}
+              </div>
+              {modalAddress ? (
+                <div style={{ marginTop: 6, fontSize: 14, opacity: 0.8, lineHeight: "20px", whiteSpace: "pre-wrap" }}>
+                  {modalAddress}
+                </div>
+              ) : null}
+            </div>
+
+            {/* Info blocks */}
+            <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 12 }}>
+              {([
+                ["출입방법", modalClient.access_method],
+                ["비번/열쇠위치", modalClient.access_code],
+                ["책임자", modalClient.manager_name],
+                ["전화번호", modalClient.manager_phone],
+                ["주차정보", modalClient.parking_info],
+              ] as const).map(([label, value]) => {
+                const isPhone = label === "전화번호";
+                const phone = (value ?? "").toString().trim();
+                const telHref = isPhone ? toTelHref(phone) : "";
+
+                return (
+                  <div
+                    key={label}
+                    style={{
+                      border: "1px solid #eee",
+                      borderRadius: 14,
+                      padding: 12,
+                    }}
+                  >
+                    <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 6 }}>{label}</div>
+
+                    {isPhone ? (
+                      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                        <div style={{ fontSize: 16, lineHeight: "22px", whiteSpace: "pre-wrap" }}>{vOrDash(value)}</div>
+
+                        {telHref ? (
+                          <a
+                            href={telHref}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{
+                              marginLeft: "auto",
+                              padding: "10px 12px",
+                              borderRadius: 12,
+                              border: "1px solid #111",
+                              background: "#111",
+                              color: "#fff",
+                              fontWeight: 900,
+                              textDecoration: "none",
+                              fontSize: 15,
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            전화걸기
+                          </a>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 16, lineHeight: "22px", whiteSpace: "pre-wrap" }}>{vOrDash(value)}</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Notes */}
+            <div style={{ marginTop: 14, borderTop: "1px solid #eee", paddingTop: 14 }}>
+              <div style={{ fontSize: 14, fontWeight: 900, marginBottom: 8 }}>메모</div>
+
+              {!noteEditMode ? (
+                <div
+                  style={{
+                    border: "1px solid #eee",
+                    borderRadius: 14,
+                    padding: 12,
+                    fontSize: 16,
+                    lineHeight: "22px",
+                    whiteSpace: "pre-wrap",
+                    background: "#fafafa",
+                  }}
+                >
+                  {vOrDash(modalClient.notes)}
+                </div>
+              ) : (
+                <textarea
+                  value={noteDraft}
+                  onChange={(e) => setNoteDraft(e.target.value)}
+                  placeholder="메모를 입력하세요"
+                  style={{
+                    width: "100%",
+                    minHeight: 140,
+                    padding: 12,
+                    border: "1px solid #ddd",
+                    borderRadius: 14,
+                    fontSize: 16,
+                    lineHeight: "22px",
+                    outline: "none",
+                    resize: "vertical",
+                  }}
+                />
+              )}
+
+              <div style={{ marginTop: 12, display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
+                {!noteEditMode ? (
+                  <button
+                    onClick={() => setNoteEditMode(true)}
+                    style={{
+                      padding: "12px 14px",
+                      borderRadius: 14,
+                      border: "1px solid #ddd",
+                      background: "#111",
+                      color: "#fff",
+                      fontWeight: 900,
+                      cursor: "pointer",
+                      fontSize: 16,
+                    }}
+                  >
+                    메모 수정
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => {
+                        setNoteEditMode(false);
+                        setNoteDraft(modalClient.notes ?? "");
+                      }}
+                      disabled={noteSaving}
+                      style={{
+                        padding: "12px 14px",
+                        borderRadius: 14,
+                        border: "1px solid #ddd",
+                        background: "#fff",
+                        fontWeight: 900,
+                        cursor: noteSaving ? "not-allowed" : "pointer",
+                        fontSize: 16,
+                        opacity: noteSaving ? 0.6 : 1,
+                      }}
+                    >
+                      취소
+                    </button>
+
+                    <button
+                      onClick={saveClientNotes}
+                      disabled={noteSaving}
+                      style={{
+                        padding: "12px 14px",
+                        borderRadius: 14,
+                        border: "1px solid #111",
+                        background: "#111",
+                        color: "#fff",
+                        fontWeight: 900,
+                        cursor: noteSaving ? "not-allowed" : "pointer",
+                        fontSize: 16,
+                        opacity: noteSaving ? 0.6 : 1,
+                      }}
+                    >
+                      {noteSaving ? "저장중..." : "저장"}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </main>
   );
